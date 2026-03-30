@@ -8,10 +8,35 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { z } from "zod";
+
+export const linusQuoteSchema = z.object({
+  photoFinalSize: z.number().min(40).max(400).describe("Final photo square size (px)"),
+  startSize: z.number().min(1080).max(3000).describe("Initial image zoom (px) — larger = more zoomed in"),
+  fontSize: z.number().min(16).max(120).describe("Text size for name label"),
+  dotCycles: z.number().min(1).max(10).int().describe("Number of dot animation cycles"),
+});
 
 const MESSAGE = "This is complete and utter garbage.";
 
-export const LinusQuote: React.FC = () => {
+const FPS = 30;
+const MSG_HOLD_FRAMES = 90; // 3s hold after message appears
+
+export const calculateLinusQuoteDuration = (dotCycles: number) => {
+  const dotsStart = Math.round(2.25 * FPS);
+  const framesPerDot = Math.round(0.4 * FPS);
+  const framePause = Math.round(0.3 * FPS);
+  const cycleLength = framesPerDot * 3 + framePause;
+  const dotsEnd = dotsStart + cycleLength * dotCycles;
+  return dotsEnd + MSG_HOLD_FRAMES;
+};
+
+export const LinusQuote: React.FC<z.infer<typeof linusQuoteSchema>> = ({
+  photoFinalSize,
+  startSize,
+  fontSize,
+  dotCycles,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -26,11 +51,10 @@ export const LinusQuote: React.FC = () => {
   const zoomEnd = 2.25 * fps;
   const easing = Easing.inOut(Easing.quad);
 
-  const photoFinalSize = 100;
   const chatLeft = (1920 - 800) / 2; // 560
+  const photoFinalTop = 540 - photoFinalSize / 2;
 
   // --- Photo container: full-bleed square → small circle ---
-  const startSize = 1920;
   const containerSize = interpolate(
     frame,
     [zoomStart, zoomEnd],
@@ -48,14 +72,14 @@ export const LinusQuote: React.FC = () => {
   const containerTop = interpolate(
     frame,
     [zoomStart, zoomEnd],
-    [(1080 - startSize) / 2, 540 - photoFinalSize / 2 - 20],
+    [(1080 - startSize) / 2, photoFinalTop],
     { extrapolateRight: "clamp", extrapolateLeft: "clamp", easing }
   );
 
   const borderRadiusPct = interpolate(
     frame,
     [zoomStart, zoomEnd],
-    [0, 50],
+    [0, 12],
     { extrapolateRight: "clamp", extrapolateLeft: "clamp", easing }
   );
 
@@ -67,9 +91,10 @@ export const LinusQuote: React.FC = () => {
   );
 
   // --- Text position: slides in from off-screen right ---
-  const textFinalLeft = chatLeft + photoFinalSize + 32;
-  const photoCenterY = 540 - photoFinalSize / 2 - 20 + photoFinalSize / 2;
-  const nameTop = photoCenterY - 38;
+  const photoTextGap = photoFinalSize * 0.32;
+  const textFinalLeft = chatLeft + photoFinalSize + photoTextGap;
+  const lineHeight = fontSize * 1.2;
+  const nameTop = photoFinalTop + photoFinalSize / 2 - lineHeight / 2;
 
   // Text starts way off-screen right (2200) and slides to final position
   // Synchronized with the photo zoom-out
@@ -102,7 +127,7 @@ export const LinusQuote: React.FC = () => {
   const framesPerDot = Math.round(0.4 * fps);
   const framePause = Math.round(0.3 * fps);
   const cycleLength = framesPerDot * 3 + framePause;
-  const totalCycles = 3;
+  const totalCycles = dotCycles;
   const dotsEnd = dotsStart + cycleLength * totalCycles;
   const isDotsPhase = frame >= dotsStart && frame < dotsEnd;
 
@@ -164,7 +189,7 @@ export const LinusQuote: React.FC = () => {
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            objectPosition: "center 15%",
+            objectPosition: "center top",
             transform: `scale(${imgScale})`,
             transformOrigin: "center 20%",
           }}
@@ -178,7 +203,8 @@ export const LinusQuote: React.FC = () => {
           left: textLeft,
           top: nameTop,
           opacity: textOpacity,
-          fontSize: 44,
+          fontSize,
+          lineHeight: `${lineHeight}px`,
           fontWeight: 700,
           color: "#ffffff",
           transform: `scale(${textScale})`,
@@ -194,7 +220,7 @@ export const LinusQuote: React.FC = () => {
         style={{
           position: "absolute",
           left: textLeft,
-          top: nameTop + 58,
+          top: nameTop + fontSize * 1.3,
           opacity: textOpacity,
           transform: `scale(${textScale})`,
           transformOrigin: "left center",
@@ -205,7 +231,7 @@ export const LinusQuote: React.FC = () => {
           <div
             style={{
               opacity: dotsOpacity,
-              fontSize: 40,
+              fontSize: fontSize * 0.9,
               color: "rgba(255,255,255,0.4)",
               letterSpacing: 4,
             }}
@@ -218,7 +244,7 @@ export const LinusQuote: React.FC = () => {
           <div
             style={{
               opacity: msgOpacity,
-              fontSize: 40,
+              fontSize: fontSize * 0.9,
               color: "rgba(255,255,255,0.85)",
               fontWeight: 400,
               marginTop: 8,
